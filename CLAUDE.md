@@ -28,7 +28,7 @@ There is no build step (no bundler/compiler) and no lint command configured.
 
 **Database**: SQLite at `germanbet.db`, gitignored — never commit it. Schema changes go through `db.create_all()` in `app/__init__.py`; `migrations/` exists but is currently unused (empty). A match may only be marked `finished` with a real score via `app/aggregator/settlement.py::finish_match` — it is the single place that updates Elo, team stats, and settles bets together. Never set `Match.status = "finished"` anywhere else.
 
-**Git Workflow**: Commit only after tests pass. Don't commit `.env`, `*.db`, or `venv/`. Standard branch is `main`.
+**Git Workflow**: `main` must always be deployable. Run `pytest` before every commit; commit only after tests pass. Don't commit `.env`, `*.db`, or `venv/`.
 
 **Code Style**: Match existing patterns — dataclasses for value objects (see `odds_selector.py`), module-level functions over classes for stateless logic (analytics, bankroll), docstrings only where a decision needs justification (see `settlement.py`, `odds_selector.py`, `constants.py` for the style).
 
@@ -50,8 +50,8 @@ There is no build step (no bundler/compiler) and no lint command configured.
 - `app/bankroll/kelly.py` — fractional Kelly sizing with stop-loss cap
 
 ## IMPORTANT
-- Preserve existing code and inline reasoning comments (e.g. in `constants.py`, `odds_selector.py`, `settlement.py`) — they encode empirically-learned constraints, not guesses. Don't remove or "simplify" them without understanding why they're there.
-- Don't assume external API/account state (API keys, quota tier, DB contents). Ask or check `.env` / `Setting` table rather than assuming defaults are populated.
+- IMPORTANT: Preserve the original code and logic as much as possible. Only change what is necessary. (Applies especially to `constants.py`, `odds_selector.py`, `settlement.py` — their comments encode empirically-learned constraints, not guesses.)
+- State your assumptions explicitly before writing code. If ambiguous, propose interpretations and ask. (E.g. don't assume external API/account state — API keys, quota tier, DB contents — check `.env` / the `Setting` table or ask instead.)
 
 ## Advisor: Project Invariants
 Consult these before changing related code — each one encodes a past failure mode, not a style preference:
