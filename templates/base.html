@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="ru" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GermanBet — {% block title %}Анализ ставок{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background: #0a0e1a; }
+        .navbar { background: linear-gradient(135deg, #0d1117 0%, #161b22 100%) !important; border-bottom: 1px solid #30363d; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; }
+        .card-header { background: transparent; border-bottom: 1px solid #30363d; font-weight: 600; }
+        .verdict-enter { color: #3fb950; font-weight: 700; }
+        .verdict-skip { color: #f85149; font-weight: 700; }
+        .verdict-suspicious { color: #d29922; font-weight: 700; }
+        .odds-up { color: #3fb950; }
+        .odds-down { color: #f85149; }
+        .stat-card { background: linear-gradient(135deg, #1a1f2e, #161b22); border: 1px solid #30363d; }
+        .stat-value { font-size: 1.8rem; font-weight: 700; color: #e6edf3; }
+        .stat-label { font-size: 0.8rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+        .table { font-size: 0.9rem; }
+        .table > :not(caption) > * > * { border-bottom-color: #30363d; }
+        .progress-bar { background: linear-gradient(90deg, #3fb950, #2ea043); }
+        .btn-primary { background: #238636; border-color: #238636; }
+        .btn-primary:hover { background: #2ea043; }
+        .badge-value { background: #238636; }
+        .badge-novalue { background: #30363d; }
+        .badge-suspicious { background: #9e6a03; }
+        footer { color: #8b949e; font-size: 0.8rem; border-top: 1px solid #21262d; }
+        .table-hover tbody tr:hover { background: rgba(56, 139, 253, 0.05); }
+        .help-icon { color: #8b949e; cursor: help; font-size: 0.85rem; }
+        .help-icon:hover { color: #58a6ff; }
+        .modal-content { background: #161b22; border: 1px solid #30363d; }
+        .modal-header { border-bottom: 1px solid #30363d; }
+        .modal-footer { border-top: 1px solid #30363d; }
+        .formula { font-family: 'Courier New', monospace; background: #0d1117; padding: 0.5rem 1rem; border-radius: 8px; border-left: 3px solid #238636; margin: 0.5rem 0; }
+        kbd { background: #30363d; color: #e6edf3; }
+        .bulk-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1a1f2e;
+            border-top: 2px solid #238636;
+            padding: 12px 0;
+            z-index: 1030;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+        }
+        .bulk-bar .container {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="bi bi-graph-up-arrow"></i> GermanBet
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/portfolio"><i class="bi bi-pie-chart"></i> Портфель</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/results"><i class="bi bi-check2-square"></i> Результаты</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/backtest"><i class="bi bi-bar-chart"></i> Backtest</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/settings"><i class="bi bi-gear"></i> Настройки</a></li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#tutorialModal">
+                            <i class="bi bi-mortarboard"></i> Как ставить
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#helpModal">
+                            <i class="bi bi-question-circle"></i> Помощь
+                        </a>
+                    </li>
+                </ul>
+                {% if stats and stats.bank is defined %}
+                <span class="navbar-text ms-2">
+                    <i class="bi bi-wallet2"></i> Банк: <strong class="text-success">{{ "%.2f"|format(stats.bank) }} ₽</strong>
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="text-center py-4 mt-5">
+        GermanBet v0.1 — Аналитическая система футбольных ставок
+    </footer>
+
+    <!-- Tutorial Modal -->
+    <div class="modal fade" id="tutorialModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-mortarboard"></i> Как делать ставки: пошаговое руководство</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="tutorialCarousel" class="carousel slide" data-bs-interval="false" data-bs-wrap="false">
+                        <div class="carousel-indicators position-relative mt-3 mb-0">
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="0" class="active"></button>
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="1"></button>
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="2"></button>
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="3"></button>
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="4"></button>
+                            <button type="button" data-bs-target="#tutorialCarousel" data-bs-slide-to="5"></button>
+                        </div>
+                        <div class="carousel-inner p-4">
+                            <!-- Step 0 -->
+                            <div class="carousel-item active">
+                                <h4 class="text-success">👋 Добро пожаловать в GermanBet!</h4>
+                                <p class="text-muted">Система находит математически обоснованные ставки на футбол. Вот как это работает.</p>
+                                <hr>
+                                <div class="row g-3 mt-2">
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-body text-center">
+                                                <div class="display-5 mb-2">🎯</div>
+                                                <h6>Ищем валуй</h6>
+                                                <small class="text-muted">Сравниваем нашу вероятность с коэффициентами 39+ букмекеров</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card h-100">
+                                            <div class="card-body text-center">
+                                                <div class="display-5 mb-2">🧮</div>
+                                                <h6>Kelly Criterion</h6>
+                                                <small class="text-muted">Оптимальный размер ставки для роста банка</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-info mt-3 mb-0">
+                                    <i class="bi bi-arrow-right"></i> Листайте для пошаговой инструкции →
+                                </div>
+                            </div>
+                            <!-- Step 1 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">1</span>
+                                    <h5 class="mb-0">Откройте Dashboard</h5>
+                                </div>
+                                <div class="card bg-dark mb-3">
+                                    <div class="card-body py-2 px-3" style="font-family: monospace; font-size:0.85rem;">
+                                        <div class="text-success">🏠 <a href="/" class="text-success">Dashboard</a> — главный экран</div>
+                                        <div class="text-muted mt-1">Все матчи сгруппированы по лигам. Для каждого матча показаны исходы (П1/X/П2), коэффициенты лучшего букмекера и анализ системы.</div>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3">
+                                            <i class="bi bi-check-circle-fill text-success"></i>
+                                            <strong class="ms-1">Ищите зелёные badge</strong>
+                                            <div class="text-muted small mt-1"><span class="badge bg-success">ВХОДИМ</span> — ставка валуйна. <span class="badge bg-secondary">Пропустить</span> — нет.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3">
+                                            <i class="bi bi-percent text-info"></i>
+                                            <strong class="ms-1">Смотрите EV%</strong>
+                                            <div class="text-muted small mt-1">Expected Value. «+18%» = ожидаемая доходность 18%. Чем выше, тем лучше.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Step 2 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">2</span>
+                                    <h5 class="mb-0">Кликните на матч</h5>
+                                </div>
+                                <div class="card bg-dark mb-3">
+                                    <div class="card-body py-2 px-3" style="font-family: monospace; font-size:0.85rem;">
+                                        <div class="text-info">🖱 <a href="#" class="text-info">Название матча</a> → Детальный разбор</div>
+                                        <div class="text-muted mt-1">Откроется страница Match Detail с раскладкой по всем букмекерам.</div>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <div class="border rounded p-3 text-center">
+                                            <div class="small text-muted">Fair Odds</div>
+                                            <div class="fw-bold">1.85</div>
+                                            <div class="text-muted small">Наша оценка</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="border rounded p-3 text-center">
+                                            <div class="small text-muted">Лучший кэф БК</div>
+                                            <div class="fw-bold text-success">2.20</div>
+                                            <div class="text-muted small">Выше fair → валуй</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="border rounded p-3 text-center">
+                                            <div class="small text-muted">Ставка (Kelly)</div>
+                                            <div class="fw-bold text-warning">1 250 ₽</div>
+                                            <div class="text-muted small">1.25% банка</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-muted small mt-2">Сравните коэффициенты 8 букмекеров в таблице. Разница между fair odds и лучшим кэфом — это ваша потенциальная прибыль.</div>
+                            </div>
+                            <!-- Step 3 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">3</span>
+                                    <h5 class="mb-0">Запишите ставку</h5>
+                                </div>
+                                <div class="card bg-dark mb-3">
+                                    <div class="card-body py-2 px-3" style="font-family: monospace; font-size:0.85rem;">
+                                        <div class="text-warning">📝 На странице матча — кнопка <span class="badge bg-primary">Записать ставку</span></div>
+                                        <div class="text-muted mt-1">Система автоматически рассчитает сумму по Kelly с учётом настроек.</div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-success">
+                                    <i class="bi bi-info-circle"></i> <strong>Пример:</strong> Банк 100 000 ₽, Kelly 5.3% × 0.25 = 1.33%, Stop-Loss 3% → ставка = <strong>1 325 ₽</strong>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3">
+                                            <i class="bi bi-wallet2 text-success"></i>
+                                            <strong> После записи</strong>
+                                            <div class="text-muted small mt-1">Банк уменьшается на сумму ставки. Ставка появляется в Портфеле.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="border rounded p-3">
+                                            <i class="bi bi-trophy text-warning"></i>
+                                            <strong> После матча</strong>
+                                            <div class="text-muted small mt-1">Вернитесь и отметьте результат (выигрыш = плюс к банку, проигрыш = минус).</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Step 4 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">4</span>
+                                    <h5 class="mb-0">Следите в Портфеле</h5>
+                                </div>
+                                <div class="card bg-dark mb-3">
+                                    <div class="card-body py-2 px-3" style="font-family: monospace; font-size:0.85rem;">
+                                        <div class="text-info">📊 <a href="/portfolio" class="text-info">Портфель</a> — все ставки, статистика, история банка</div>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-2 text-center">
+                                            <div class="small text-muted">Всего ставок</div>
+                                            <div class="fw-bold">12</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-2 text-center">
+                                            <div class="small text-muted">Win Rate</div>
+                                            <div class="fw-bold text-success">66%</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-2 text-center">
+                                            <div class="small text-muted">ROI</div>
+                                            <div class="fw-bold text-success">+24%</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border rounded p-2 text-center">
+                                            <div class="small text-muted">Банк</div>
+                                            <div class="fw-bold">105 400 ₽</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-muted small mt-2">На этой странице вы можете <strong>отметить исход</strong> завершённого матча (W/L) и <strong>экспортировать</strong> историю в CSV.</div>
+                            </div>
+                            <!-- Step 5 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">5</span>
+                                    <h5 class="mb-0">Настройте параметры</h5>
+                                </div>
+                                <div class="card bg-dark mb-3">
+                                    <div class="card-body py-2 px-3" style="font-family: monospace; font-size:0.85rem;">
+                                        <div class="text-warning">⚙ <a href="/settings" class="text-warning">Настройки</a> — измените модель под свой стиль</div>
+                                    </div>
+                                </div>
+                                <table class="table table-dark table-sm table-borderless">
+                                    <tr><td><strong>Fractional Kelly</strong></td><td>0.10 = супер-консервативный, 0.50 = агрессивный</td></tr>
+                                    <tr><td><strong>Min EV</strong></td><td>3% = входим только при доходности > 3%</td></tr>
+                                    <tr><td><strong>Max bet %</strong></td><td>Максимальный % банка на одну ставку</td></tr>
+                                    <tr><td><strong>Poisson / Elo / Form</strong></td><td>Веса моделей. Сумма = 1.0. Backtest подберёт оптимум.</td></tr>
+                                </table>
+                                <div class="alert alert-info mb-0">
+                                    <i class="bi bi-bar-chart"></i> Запустите <a href="/backtest" class="alert-link">Backtest</a> — он переберёт 66 комбинаций весов и найдёт лучшую по ROI.
+                                </div>
+                            </div>
+                            <!-- Step 6 -->
+                            <div class="carousel-item">
+                                <div class="d-flex align-items-center mb-3">
+                                    <span class="badge bg-success rounded-pill fs-5 me-2">🎓</span>
+                                    <h5 class="mb-0">Вы готовы!</h5>
+                                </div>
+                                <div class="card text-center bg-dark p-4 mb-3">
+                                    <div class="display-4 mb-3">🚀</div>
+                                    <h5>Сводка цикла ставки</h5>
+                                    <div class="row g-2 mt-3">
+                                        <div class="col-4"><span class="badge bg-primary fs-6 w-100 py-2">1. Dashboard</span></div>
+                                        <div class="col-4"><span class="badge bg-primary fs-6 w-100 py-2">2. Match Detail</span></div>
+                                        <div class="col-4"><span class="badge bg-primary fs-6 w-100 py-2">3. Записать</span></div>
+                                        <div class="col-6 mt-2"><span class="badge bg-primary fs-6 w-100 py-2">4. Портфель</span></div>
+                                        <div class="col-6 mt-2"><span class="badge bg-primary fs-6 w-100 py-2">5. Фикс. результат</span></div>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-sm-4">
+                                        <a href="/" class="btn btn-success w-100" onclick="closeTutorial()">
+                                            <i class="bi bi-speedometer2"></i> На Dashboard
+                                        </a>
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <button class="btn btn-outline-secondary w-100" onclick="location.href='/portfolio'">
+                                            <i class="bi bi-pie-chart"></i> В Портфель
+                                        </button>
+                                    </div>
+                                    <div class="col-sm-4">
+                                        <button class="btn btn-outline-info w-100" onclick="location.href='/settings'">
+                                            <i class="bi bi-gear"></i> Настройки
+                                        </button>
+                                    </div>
+                                </div>
+                                <p class="text-muted small mt-3 mb-0">Не забудьте запустить <a href="/backtest">Backtest</a> после накопления 20–30 ставок для калибровки весов.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-target="#tutorialCarousel" data-bs-slide="prev">
+                        <i class="bi bi-arrow-left"></i> Назад
+                    </button>
+                    <span class="text-muted small" id="tutorialStepCounter">1 / 7</span>
+                    <button type="button" class="btn btn-success" data-bs-target="#tutorialCarousel" data-bs-slide="next">
+                        Далее <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var carousel = document.getElementById('tutorialCarousel');
+        if (carousel) {
+            carousel.addEventListener('slide.bs.carousel', function (e) {
+                var total = document.querySelectorAll('#tutorialCarousel .carousel-item').length;
+                var idx = e.to;
+                document.getElementById('tutorialStepCounter').textContent = (idx + 1) + ' / ' + total;
+                var prevBtn = document.querySelector('[data-bs-slide="prev"]');
+                var nextBtn = document.querySelector('[data-bs-slide="next"]');
+                var modalFooter = prevBtn.closest('.modal-footer');
+                if (idx === 0) {
+                    prevBtn.style.display = 'none';
+                } else {
+                    prevBtn.style.display = '';
+                }
+                if (idx === total - 1) {
+                    nextBtn.textContent = 'Готово!';
+                    nextBtn.onclick = function () {
+                        var modal = bootstrap.Modal.getInstance(document.getElementById('tutorialModal'));
+                        if (modal) modal.hide();
+                    };
+                } else {
+                    nextBtn.innerHTML = 'Далее <i class="bi bi-arrow-right"></i>';
+                    nextBtn.onclick = null;
+                }
+            });
+        }
+    });
+    function closeTutorial() {
+        var modal = bootstrap.Modal.getInstance(document.getElementById('tutorialModal'));
+        if (modal) modal.hide();
+    }
+    </script>
+
+    <!-- Help Modal -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-question-circle"></i> Как работает GermanBet</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>🔍 Поиск валуйных ставок</h6>
+                    <p>Система находит ставки, где <strong>истинная вероятность</strong> события выше, чем вероятность, заложенная букмекером в коэффициент.</p>
+                    <div class="formula">Value = Истинная_Вероятность × Коэффициент_БК − 1</div>
+                    <p>Если <strong>Value &gt; 0</strong> — ставка валуйная (имеет математическое ожидание в вашу пользу).</p>
+
+                    <h6 class="mt-4">📊 Как рассчитывается истинная вероятность</h6>
+                    <p>Итоговая вероятность = взвешенная сумма трёх моделей:</p>
+                    <table class="table table-dark table-sm table-borderless">
+                        <tr><td><strong>Poisson (50%)</strong></td><td>Модель распределения голов. Оценивает силу атаки и защиты на основе средних голов за матч.</td></tr>
+                        <tr><td><strong>Elo (30%)</strong></td><td>Рейтинг команд, обновляемый после каждого матча. Учитывает силу соперника и разницу голов.</td></tr>
+                        <tr><td><strong>Form (20%)</strong></td><td>Анализ последних 5 матчей: победы, ничьи, поражения с весовым коэффициентом.</td></tr>
+                    </table>
+
+                    <h6 class="mt-4">💰 Критерий Келли (Kelly Criterion)</h6>
+                    <p>Оптимальный процент банка для ставки, максимизирующий долгосрочный рост капитала:</p>
+                    <div class="formula">Kelly% = (K × P − 1) / (K − 1)</div>
+                    <p>Где <strong>K</strong> — коэффициент БК, <strong>P</strong> — ваша истинная вероятность.</p>
+                    <p>Для снижения риска используется <strong>дробный Келли</strong> (по умолчанию 25% от полного), а также жёсткий <strong>Stop-Loss</strong> (максимум 3% банка на одно событие).</p>
+
+                    <h6 class="mt-4">📋 Как читать Dashboard</h6>
+                    <table class="table table-dark table-sm table-borderless">
+                        <tr><td><span class="badge bg-success">✅ H | ВХОДИМ</span></td><td>Валуйная ставка на П1. Можно входить.</td></tr>
+                        <tr><td><span class="badge bg-secondary">⏭ Пропустить</span></td><td>Ставка не валуйна (EV ниже порога или отрицательный).</td></tr>
+                        <tr><td><strong>EV%</strong></td><td>Expected Value — ожидаемая доходность ставки в процентах. EV &gt; 2% — зелёный сигнал.</td></tr>
+                        <tr><td><strong>Fair Odds</strong></td><td>«Справедливый» коэффициент — 1 / истинная_вероятность. Если кэф БК выше fair — ставка валуйна.</td></tr>
+                        <tr><td><strong>Ставка</strong></td><td>Рекомендуемая сумма в рублях (Kelly × банк, но не более 3% банка).</td></tr>
+                    </table>
+
+                    <h6 class="mt-4">⚙️ Настройки</h6>
+                    <ul>
+                        <li><strong>Fractional Kelly</strong> — доля от полного Келли (0.25 = 25%). Чем ниже, тем консервативнее.</li>
+                        <li><strong>Max bet %</strong> — максимальный процент банка на одну ставку (Stop-Loss).</li>
+                        <li><strong>Min EV</strong> — минимальный порог ожидаемой доходности для входа.</li>
+                        <li><strong>Веса модели</strong> — вклад каждой модели (Poisson/Elo/Form) в итоговую вероятность. Должны суммироваться в 1.0.</li>
+                    </ul>
+
+                    <h6 class="mt-4">🔄 Жизненный цикл</h6>
+                    <ol>
+                        <li>Система собирает матчи и коэффициенты из API (или тестовые данные)</li>
+                        <li>Рассчитывает истинную вероятность по трём моделям</li>
+                        <li>Сравнивает с коэффициентами БК, находит валуйные ставки</li>
+                        <li>Вычисляет оптимальный размер ставки по Келли</li>
+                        <li>Вы записываете ставку → банк уменьшается</li>
+                        <li>После матча отмечаете результат (W/L) → банк пересчитывается</li>
+                        <li>Периодически запускаете Backtest для подбора оптимальных весов</li>
+                    </ol>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el) })
+        });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Портфель{% endblock %}
+{% block content %}
+
+<a href="/" class="btn btn-outline-secondary btn-sm rounded-circle mb-2" style="width:36px;height:36px;" title="На Dashboard">
+    <i class="bi bi-arrow-left fs-5"></i>
+</a>
+
+<div class="alert alert-info small" role="alert">
+    <i class="bi bi-info-circle"></i>
+    <strong>Как пользоваться:</strong>
+    Ставки записываются со страницы матча. После окончания матча нажмите
+    <span class="badge bg-success">W</span> (выигрыш) или
+    <span class="badge bg-danger">L</span> (проигрыш) — банк пересчитается автоматически.
+    <a href="#" data-bs-toggle="modal" data-bs-target="#helpModal" class="alert-link">Подробнее</a>.
+</div>
+
+<div class="row mb-4 g-3">
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value">{{ stats.won }}</div>
+            <div class="stat-label">Выигрыши <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Количество выигранных ставок"></i></div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value">{{ stats.lost }}</div>
+            <div class="stat-label">Проигрыши <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Количество проигранных ставок"></i></div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value">{{ stats.pending }}</div>
+            <div class="stat-label">Ожидают <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Ставки, результат которых ещё не отмечен"></i></div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value">{{ stats.win_rate }}%</div>
+            <div class="stat-label">Win Rate <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Процент выигранных ставок: W / (W + L) × 100%"></i></div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value {% if stats.roi > 0 %}text-success{% elif stats.roi < 0 %}text-danger{% endif %}">
+                {{ stats.roi }}%
+            </div>
+            <div class="stat-label">
+                ROI
+                <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Return on Investment — отношение прибыли к сумме ставок. Главный показатель эффективности."></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stat-card text-center p-3">
+            <div class="stat-value {% if stats.total_profit > 0 %}text-success{% elif stats.total_profit < 0 %}text-danger{% endif %}">
+                {{ "%.2f"|format(stats.total_profit) }} ₽
+            </div>
+            <div class="stat-label">
+                PnL
+                <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Profit and Loss — чистая прибыль или убыток за всё время"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <span><i class="bi bi-clock-history"></i> История банка</span>
+        <span class="text-muted small float-end"><i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Все изменения банка: пополнения, ставки, расчёты"></i></span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 200px;">
+            <table class="table table-dark table-sm m-0">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Изменение</th>
+                        <th>Баланс</th>
+                        <th>Причина</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in bank_log[:30] %}
+                    <tr>
+                        <td><small>{{ log.created_at|msk|dtfmt }}</small></td>
+                        <td class="fw-bold {% if log.change > 0 %}text-success{% elif log.change < 0 %}text-danger{% endif %}">
+                            {% if log.change > 0 %}+{% endif %}{{ "%.2f"|format(log.change) }}
+                        </td>
+                        <td>{{ "%.2f"|format(log.amount) }}</td>
+                        <td><small>{{ log.reason or "" }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-check"></i> История ставок</span>
+        <a href="/portfolio/export" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-download"></i> Экспорт CSV
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm m-0">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Матч</th>
+                        <th>Исход</th>
+                        <th>Кэф</th>
+                        <th>Сумма</th>
+                        <th>Результат <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="W = выигрыш, L = проигрыш. Нажмите кнопку, чтобы отметить результат."></i></th>
+                        <th>Profit <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Прибыль = сумма × (кэф − 1) при выигрыше, −сумма при проигрыше"></i></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bet in bets %}
+                    <tr>
+                        <td><small>{{ bet.created_at|msk|dtfmt }}</small></td>
+                        <td>
+                            {% if bet.match %}
+                            {{ bet.match.home_team.name }} vs {{ bet.match.away_team.name }}
+                            {% else %}
+                            Матч #{{ bet.match_id }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if bet.outcome == "H" %}П1{% elif bet.outcome == "D" %}X{% elif bet.outcome == "A" %}П2{% endif %}
+                        </td>
+                        <td>{{ bet.odds }}</td>
+                        <td>{{ "%.2f"|format(bet.stake) }} ₽</td>
+                        <td>
+                            {% if bet.result == "pending" %}
+                            <form method="POST" action="/bet/{{ bet.id }}/settle" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="result" value="W">
+                                <button type="submit" class="btn btn-sm btn-success" data-bs-toggle="tooltip" title="Ставка выиграла">W</button>
+                            </form>
+                            <form method="POST" action="/bet/{{ bet.id }}/settle" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="result" value="L">
+                                <button type="submit" class="btn btn-sm btn-danger" data-bs-toggle="tooltip" title="Ставка проиграла">L</button>
+                            </form>
+                            {% elif bet.result == "W" %}
+                            <span class="badge bg-success">W</span>
+                            {% else %}
+                            <span class="badge bg-danger">L</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold {% if bet.profit and bet.profit > 0 %}text-success{% elif bet.profit and bet.profit < 0 %}text-danger{% endif %}">
+                            {% if bet.profit is not none %}
+                            {% if bet.profit > 0 %}+{% endif %}{{ "%.2f"|format(bet.profit) }} ₽
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox"></i> Ставок пока нет
+                            <br><small>Перейдите на <a href="/">Dashboard</a>, выберите матч с валуйным сигналом и запишите ставку.</small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

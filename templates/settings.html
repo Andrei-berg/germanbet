@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+
+<div class="alert alert-info small" role="alert">
+    <i class="bi bi-info-circle"></i>
+    <strong>Параметры модели:</strong> веса Poisson/Elo/Form должны суммироваться в 1.0.
+    Kelly fraction = 0.25 означает, что используется 25% от полного Келли (консервативный режим).
+    Min EV = 2% означает, что ставка рассматривается только при ожидаемой доходности > 2%.
+    <a href="#" data-bs-toggle="modal" data-bs-target="#helpModal" class="alert-link">Подробнее</a>.
+</div>
+
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-wallet2"></i> Банкролл и риски</div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label">
+                            Текущий банк (₽)
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Размер игрового банка. Все ставки рассчитываются как % от этой суммы."></i>
+                        </label>
+                        <input type="number" name="bank" class="form-control form-control-lg"
+                               value="{{ "%.2f"|format(bank) }}" step="0.01">
+                    </div>
+                    <hr>
+                    <h6>
+                        Риск-менеджмент
+                        <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Настройки управления капиталом. Влияют на размер ставки и частоту входов."></i>
+                    </h6>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Fractional Kelly
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Доля от полного критерия Келли. 0.25 = 25%. Чем ниже, тем консервативнее. Рекомендуемый диапазон: 0.10–0.50."></i>
+                        </label>
+                        <input type="number" name="kelly_fraction" class="form-control"
+                               value="{{ settings.kelly_fraction|default(config.KELLY_FRACTION) }}"
+                               step="0.05" min="0" max="1">
+                        <small class="text-muted">Формула: Kelly(полный) × fraction</small>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Max bet (% банка)
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Жёсткий stop-loss: максимальный процент банка на одну ставку. Рекомендуется 1–5%."></i>
+                        </label>
+                        <input type="number" name="max_bet_pct" class="form-control"
+                               value="{{ settings.max_bet_pct|default(config.MAX_BET_PCT) }}"
+                               step="0.01" min="0" max="1">
+                        <small class="text-muted">Stop-Loss: ставка не превысит {{ (settings.max_bet_pct|default(config.MAX_BET_PCT)) * 100 }}% банка</small>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Min EV для входа
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Минимальный порог Expected Value для входа в ставку. 2% означает, что ставка рассматривается только при EV > 2%."></i>
+                        </label>
+                        <input type="number" name="min_ev" class="form-control"
+                               value="{{ settings.min_ev|default(config.MIN_EV) }}"
+                               step="0.01" min="0" max="1">
+                        <small class="text-muted">EV = P(наша) × K(БК) − 1. Рекомендуется 0.01–0.05 (1–5%)</small>
+                    </div>
+                    <hr>
+                    <h6>
+                        Веса модели
+                        <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Вклад каждой модели в итоговую вероятность. Должны суммироваться в 1.0. Poisson = голы, Elo = рейтинг, Form = форма."></i>
+                    </h6>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Poisson
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Модель распределения Пуассона. Оценивает вероятный счёт на основе средних голов за матч."></i>
+                        </label>
+                        <input type="number" name="poisson_weight" class="form-control"
+                               value="{{ settings.poisson_weight|default(0.50) }}"
+                               step="0.05" min="0" max="1">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Elo
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Рейтинговая система Elo. Учитывает силу команд и историю встреч. Обновляется после каждого матча."></i>
+                        </label>
+                        <input type="number" name="elo_weight" class="form-control"
+                               value="{{ settings.elo_weight|default(0.30) }}"
+                               step="0.05" min="0" max="1">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">
+                            Form
+                            <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Анализ текущей формы. Учитывает результаты последних 5 матчей с весовым коэффициентом."></i>
+                        </label>
+                        <input type="number" name="form_weight" class="form-control"
+                               value="{{ settings.form_weight|default(0.20) }}"
+                               step="0.05" min="0" max="1">
+                        <small class="text-muted">Сумма весов: {{ (settings.poisson_weight|default(0.50)) + (settings.elo_weight|default(0.30)) + (settings.form_weight|default(0.20)) }}</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3">
+                        <i class="bi bi-save"></i> Сохранить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-info-circle"></i> Текущие параметры</div>
+            <div class="card-body">
+                <table class="table table-dark table-sm">
+                    <tr>
+                        <td>Fractional Kelly</td>
+                        <td class="fw-bold">{{ settings.kelly_fraction|default(config.KELLY_FRACTION) }}</td>
+                        <td><small class="text-muted">25% = консервативный, 50% = умеренный, 100% = агрессивный</small></td>
+                    </tr>
+                    <tr>
+                        <td>Max bet (% банка)</td>
+                        <td class="fw-bold">{{ (settings.max_bet_pct|default(config.MAX_BET_PCT)) * 100 }}%</td>
+                        <td><small class="text-muted">Максимум {{ (settings.max_bet_pct|default(config.MAX_BET_PCT)) * 100 }}% банка на одну ставку</small></td>
+                    </tr>
+                    <tr>
+                        <td>Min EV для входа</td>
+                        <td class="fw-bold">{{ (settings.min_ev|default(config.MIN_EV)) * 100 }}%</td>
+                        <td><small class="text-muted">Ставка входит только при EV выше этого порога</small></td>
+                    </tr>
+                    <tr>
+                        <td>Poisson вес</td>
+                        <td class="fw-bold">{{ settings.poisson_weight|default(0.50) }}</td>
+                        <td><small class="text-muted">Голевая статистика</small></td>
+                    </tr>
+                    <tr>
+                        <td>Elo вес</td>
+                        <td class="fw-bold">{{ settings.elo_weight|default(0.30) }}</td>
+                        <td><small class="text-muted">Рейтинг команд</small></td>
+                    </tr>
+                    <tr>
+                        <td>Form вес</td>
+                        <td class="fw-bold">{{ settings.form_weight|default(0.20) }}</td>
+                        <td><small class="text-muted">Форма 5 матчей</small></td>
+                    </tr>
+                </table>
+
+                <div class="formula mt-3">
+                    P(итог) = {{ settings.poisson_weight|default(0.50) }} × Poisson
+                    + {{ settings.elo_weight|default(0.30) }} × Elo
+                    + {{ settings.form_weight|default(0.20) }} × Form
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <span><i class="bi bi-database"></i> Данные и API</span>
+                <span class="text-muted small float-end"><i class="bi bi-info-circle" data-bs-toggle="tooltip" title="API-ключи в .env определяют источник данных. Без ключей — тестовые данные."></i></span>
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm">
+                    <tr>
+                        <td>TheSportsDB API</td>
+                        <td>{% if config.SPORTSDB_API_KEY %}<span class="text-success">✅</span>{% else %}<span class="text-warning">⏸</span>{% endif %}</td>
+                        <td><small class="text-muted">Расписание матчей, команды, результаты</small></td>
+                    </tr>
+                    <tr>
+                        <td>Open Odds API</td>
+                        <td>{% if config.ODDS_API_KEY %}<span class="text-success">✅</span>{% else %}<span class="text-warning">⏸</span>{% endif %}</td>
+                        <td><small class="text-muted">Коэффициенты от {{ config.ODDS_API_KEY and "39+" or "—" }} букмекеров</small></td>
+                    </tr>
+                    <tr>
+                        <td>OpenWeather API</td>
+                        <td>{% if config.WEATHER_API_KEY %}<span class="text-success">✅</span>{% else %}<span class="text-warning">⏸</span>{% endif %}</td>
+                        <td><small class="text-muted">Погода на матч (влияет на корректировку вероятностей)</small></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><i class="bi bi-lightbulb"></i> Рекомендации</div>
+            <div class="card-body small">
+                <ul class="mb-0">
+                    <li><strong>Начинающим:</strong> Kelly = 0.10, Max bet = 2%, Min EV = 3%</li>
+                    <li><strong>Умеренный:</strong> Kelly = 0.25, Max bet = 3%, Min EV = 2%</li>
+                    <li><strong>Опытный:</strong> Kelly = 0.50, Max bet = 5%, Min EV = 1%</li>
+                    <li>Запустите <a href="/backtest">Backtest</a> для подбора оптимальных весов модели</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

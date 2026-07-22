@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Backtest{% endblock %}
+{% block content %}
+
+<div class="alert alert-info small" role="alert">
+    <i class="bi bi-info-circle"></i>
+    <strong>Что такое Backtest?</strong>
+    Система перебирает 66 комбинаций весов Poisson/Elo/Form и прогоняет их по историческим матчам.
+    Лучшая комбинация — та, что даёт максимальный ROI на прошлых данных.
+    Нажмите <strong>«Применить лучшие веса»</strong>, чтобы использовать их в прогнозах.
+    <a href="#" data-bs-toggle="modal" data-bs-target="#helpModal" class="alert-link">Подробнее о модели</a>.
+</div>
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bar-chart"></i> Backtest — подбор весов модели</span>
+        <form method="POST" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="apply">
+            <button type="submit" class="btn btn-sm btn-success" data-bs-toggle="tooltip"
+                    title="Сохраняет лучшую комбинацию весов в настройки. Прогнозы начнут использовать их при следующем обновлении.">
+                <i class="bi bi-check-circle"></i> Применить лучшие веса
+            </button>
+        </form>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">
+            <i class="bi bi-info-circle"></i>
+            Перебор комбинаций <strong>Poisson</strong> / <strong>Elo</strong> / <strong>Form</strong> с шагом 0.1.
+            Отсортировано по <strong>ROI</strong>.
+            Всего комбинаций: <strong>{{ total }}</strong>
+            | Исторических матчей: <strong>{{ finished_matches }}</strong>
+        </p>
+
+        {% if results %}
+        <div class="table-responsive">
+            <table class="table table-dark table-sm">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Poisson <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Вес модели распределения Пуассона (голы)"></i></th>
+                        <th>Elo <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Вес рейтинга Elo (сила команд)"></i></th>
+                        <th>Form <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Вес анализа формы (последние матчи)"></i></th>
+                        <th>Accuracy <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Процент правильно угаданных исходов"></i></th>
+                        <th>ROI <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Return on Investment — главный критерий оптимизации"></i></th>
+                        <th>Profit <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Чистая прибыль на исторических данных"></i></th>
+                        <th>Bets <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Количество ставок, которые модель рекомендовала бы"></i></th>
+                        <th>Brier <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Калибровка вероятностей: средний квадрат ошибки (H/D/A против факта). Меньше — лучше, 0 — идеально."></i></th>
+                        <th>Log-loss <i class="bi bi-info-circle help-icon" data-bs-toggle="tooltip" title="Штраф за уверенность в неправильном исходе. Меньше — лучше. Хорошая accuracy не гарантирует хорошую калибровку."></i></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr class="{% if loop.index == 1 %}table-success{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td class="fw-bold">{{ r.poisson_weight }}</td>
+                        <td>{{ r.elo_weight }}</td>
+                        <td>{{ r.form_weight }}</td>
+                        <td>{{ r.accuracy }}%</td>
+                        <td class="fw-bold {% if r.roi > 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ r.roi }}%
+                        </td>
+                        <td class="{% if r.profit > 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "%.2f"|format(r.profit) }} ₽
+                        </td>
+                        <td>{{ r.total_bets }}</td>
+                        <td>{{ r.brier_score }}</td>
+                        <td>{{ r.log_loss }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-inbox"></i> Нет завершённых матчей для бэктеста.
+            <br><small>Добавьте исторические матчи в БД или используйте seed-данные.</small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-lightbulb"></i> Как интерпретировать результаты</div>
+    <div class="card-body small">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Accuracy</strong> — процент правильно предсказанных исходов. Высокий = модель точна.</p>
+                <p><strong>ROI</strong> — доходность. Даже небольшая точность может давать высокий ROI, если модель правильно определяет размер ставки (Kelly).</p>
+                <p><strong>Brier / Log-loss</strong> — калибровка: насколько честны сами вероятности, а не только "угадали ли исход". Модель может иметь хорошую accuracy, но быть плохо откалиброванной (например, всегда говорить "90% уверен", когда права лишь в 60% случаев) — эти метрики это ловят. Меньше — лучше, 0 — идеально.</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Poisson</strong> — хорош для лиг с предсказуемой статистикой голов (Бундеслига, АПЛ). Использует поправку Диксона-Коулза на заниженную вероятность ничьих.</p>
+                <p><strong>Elo</strong> — лучше работает, когда много исторических данных.</p>
+                <p><strong>Form</strong> — важен для команд с нестабильными результатами.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
