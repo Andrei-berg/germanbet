@@ -7,7 +7,7 @@ from app import db
 from app.models import Team, Match
 from app.config import Config
 from app.aggregator.settlement import finish_match
-from app.aggregator.historical_backfill import replay_collected_events
+from app.aggregator.historical_backfill import replay_collected_events, set_team_id_if_unclaimed
 
 
 BASE_URL = "https://www.thesportsdb.com/api/v1/json"
@@ -420,8 +420,13 @@ def backfill_team_history(limit_per_team: int = 5, max_teams_per_run: int = 20) 
             time.sleep(REQUEST_DELAY_SECONDS)
             if not found:
                 continue
-            team.external_id = found.get("idTeam")
-            db.session.flush()
+            # Two of our rows can independently name-match the same
+            # TheSportsDB team (e.g. "Racing de Santander" vs "Real Racing
+            # Club de Santander") - don't blindly claim an id another row
+            # already owns, that hits external_id's UNIQUE constraint.
+            set_team_id_if_unclaimed(team, "external_id", found.get("idTeam"))
+            if not team.external_id:
+                continue
 
         events = fetch_last_events_for_team(team.external_id)[:limit_per_team]
         time.sleep(REQUEST_DELAY_SECONDS)

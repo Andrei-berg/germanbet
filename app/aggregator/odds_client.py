@@ -7,7 +7,7 @@ from app import db
 from app.models import Team, Match, Odds
 from app.config import Config
 from app.aggregator.settlement import finish_match
-from app.aggregator.historical_backfill import normalize_team_name
+from app.aggregator.historical_backfill import normalize_team_name, canonical_team_name
 
 
 BASE_URL = "https://api.the-odds-api.com/v4"
@@ -67,6 +67,7 @@ def fetch_scores_for_sport(sport: str = "soccer_epl", days_from: int = 3) -> lis
 
 
 def _get_or_create_team(name: str, league: str) -> Team:
+    name = canonical_team_name(name)
     team = Team.query.filter_by(name=name).first()
     if team:
         return team

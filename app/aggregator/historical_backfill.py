@@ -9,6 +9,52 @@ from app.aggregator.settlement import finish_match
 
 _CLUB_SUFFIX_TOKENS = {"fc", "cf", "afc", "ac", "sc", "ssc", "us", "as", "calcio"}
 
+# Same failure mode as RPL_NAME_ALIASES (api_football_client.py), just for the
+# other 5 leagues: normalize_team_name's suffix-stripping isn't enough when
+# providers disagree on the *whole* name, not just a suffix - e.g. API-Football's
+# "Tottenham" vs football-data.org's "Tottenham Hotspur" share no stripped
+# token in common. Discovered 2026-07-22 when an API-Football top-5-league
+# backfill created ~70 duplicate Team rows (and ~1200 duplicate/fragmented
+# Match rows, double-counting Elo for real fixtures) this way. Hand-verified
+# against real club identities - deliberately excludes reserve/youth/women's
+# teams that share a name root with the first team (e.g. "Real Valladolid
+# Promesas" is Valladolid's reserve side, not the same competitive entity).
+TOP5_NAME_ALIASES = {
+    # Premier League
+    "Brighton & Hove Albion FC": "Brighton", "Brighton and Hove Albion": "Brighton",
+    "Ipswich Town": "Ipswich", "Leeds United": "Leeds", "Newcastle United": "Newcastle",
+    "Sheffield United": "Sheffield Utd", "Tottenham Hotspur": "Tottenham",
+    "West Ham United": "West Ham", "Wolverhampton Wanderers": "Wolves",
+    # Bundesliga
+    "1. FC Heidenheim 1846": "1. FC Heidenheim", "FC Heidenheim": "1. FC Heidenheim",
+    "FC Köln": "1. FC Köln", "TSG 1899 Hoffenheim": "1899 Hoffenheim",
+    "TSG Hoffenheim": "1899 Hoffenheim", "Bayer 04 Leverkusen": "Bayer Leverkusen",
+    "Bayern Munich": "FC Bayern München", "Elversberg": "SV Elversberg",
+    "FC St. Pauli 1910": "St Pauli", "Hamburg": "Hamburger SV",
+    "1. FSV Mainz 05": "FSV Mainz 05", "Mainz": "FSV Mainz 05",
+    "SC Paderborn": "SC Paderborn 07", "SV Werder Bremen": "Werder Bremen",
+    "1. FC Union Berlin": "Union Berlin", "Wolfsburg": "VfL Wolfsburg",
+    # La Liga
+    "Athletic Bilbao": "Athletic Club", "Deportivo Alavés": "Alavés",
+    "Club Atlético de Madrid": "Atlético Madrid", "RC Celta de Vigo": "Celta Vigo",
+    "CA Osasuna": "Osasuna", "RCD Espanyol de Barcelona": "Espanyol",
+    "Levante UD": "Levante", "RCD Mallorca": "Mallorca", "Oviedo": "Real Oviedo",
+    "Rayo Vallecano de Madrid": "Rayo Vallecano", "Real Betis Balompié": "Real Betis",
+    "Real Sociedad de Fútbol": "Real Sociedad",
+    # Serie A
+    "Pisa": "AC Pisa 1909", "ACF Fiorentina": "Fiorentina", "Atalanta BC": "Atalanta",
+    "Bologna FC 1909": "Bologna", "Como 1907": "Como",
+    "FC Internazionale Milano": "Inter", "Inter Milan": "Inter",
+    "Genoa CFC": "Genoa", "SS Lazio": "Lazio", "Parma Calcio 1913": "Parma",
+    # Ligue 1
+    "AJ Auxerre": "Auxerre", "Angers SCO": "Angers", "Brest": "Stade Brestois 29",
+    "Troyes": "Estac Troyes", "RC Lens": "Lens", "Racing Club de Lens": "Lens",
+    "Lille OSC": "Lille", "Olympique Lyonnais": "Lyon", "Olympique de Marseille": "Marseille",
+    "OGC Nice": "Nice", "Nîmes Olympique": "Nimes", "Red Star": "RED Star FC 93",
+    "Stade de Reims": "Reims", "Stade Rennais FC 1901": "Rennes",
+    "RC Strasbourg Alsace": "Strasbourg",
+}
+
 
 def normalize_team_name(name: str) -> str:
     """Strip diacritics/case/common club-suffix tokens (FC, CF, AFC, ...) so
@@ -21,6 +67,32 @@ def normalize_team_name(name: str) -> str:
     tokens = re.findall(r"[a-z0-9]+", ascii_name.lower())
     tokens = [t for t in tokens if t not in _CLUB_SUFFIX_TOKENS]
     return " ".join(tokens)
+
+
+def canonical_team_name(name: str) -> str:
+    """Map a provider-specific alternate name to the name our Team row was
+    created under (see TOP5_NAME_ALIASES). Apply before any Team lookup so
+    all providers converge on one row instead of forking a duplicate.
+    """
+    return TOP5_NAME_ALIASES.get(name, name)
+
+
+def set_team_id_if_unclaimed(team: Team, id_field: str, ext_id: str | None) -> None:
+    """Attach a provider id to a resolved team, unless some *other* row
+    already claims it - two rows independently ending up with the same
+    provider id for the same real club (e.g. TheSportsDB's "Racing de
+    Santander" vs "Real Racing Club de Santander") would otherwise hit the
+    column's UNIQUE constraint and crash the whole sync. Leaving the id
+    unset on this row is a safe no-op: it just means this specific row won't
+    get a fast id-lookup next time, not silent data corruption.
+    """
+    if not ext_id or getattr(team, id_field):
+        return
+    conflict = Team.query.filter_by(**{id_field: ext_id}).first()
+    if conflict and conflict.id != team.id:
+        return
+    setattr(team, id_field, ext_id)
+    db.session.flush()
 
 
 def resolve_historical_team(name: str, ext_id: str | None, league: str, id_field: str) -> Team:
@@ -36,19 +108,17 @@ def resolve_historical_team(name: str, ext_id: str | None, league: str, id_field
         if existing:
             return existing
 
+    name = canonical_team_name(name)
+
     team = Team.query.filter_by(name=name).first()
     if team:
-        if ext_id and not getattr(team, id_field):
-            setattr(team, id_field, ext_id)
-            db.session.flush()
+        set_team_id_if_unclaimed(team, id_field, ext_id)
         return team
 
     normalized_target = normalize_team_name(name)
     for candidate in Team.query.filter_by(league=league).all():
         if normalize_team_name(candidate.name) == normalized_target:
-            if ext_id and not getattr(candidate, id_field):
-                setattr(candidate, id_field, ext_id)
-                db.session.flush()
+            set_team_id_if_unclaimed(candidate, id_field, ext_id)
             return candidate
 
     team = Team(name=name, league=league, **{id_field: ext_id})

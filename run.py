@@ -17,6 +17,7 @@ def sync_real_data():
     with app.app_context():
         from app.aggregator.odds_client import sync_odds_from_api, sync_results_from_odds_api
         from app.aggregator.thesportsdb_client import backfill_team_history
+        from app.aggregator.api_football_client import sync_upcoming_odds, LEAGUE_IDS
 
         synced = sync_results_from_odds_api()
         if synced:
@@ -28,6 +29,10 @@ def sync_real_data():
         warmed = backfill_team_history()
         if warmed:
             print(f"Догружена история по новым командам: {warmed} матчей")
+
+        af_odds = sync_upcoming_odds(leagues=LEAGUE_IDS)
+        if af_odds:
+            print(f"Загружено коэффициентов (API-Football, все лиги): {af_odds}")
 
 
 def run_analysis():
@@ -47,6 +52,21 @@ def backfill_odds(max_requests: int = 50):
         from app.aggregator.odds_client import backfill_historical_odds
         added = backfill_historical_odds(max_requests=max_requests)
         print(f"Добавлено исторических коэффициентов: {added} (за {max_requests} запросов максимум)")
+
+
+def backfill_rpl(seasons: list[int]):
+    """Manual: pulls RPL (Russian Premier League) season history via
+    API-Football - the only source that covers this league at all
+    (football-data.org's free tier doesn't). Worth running for several past
+    seasons while the paid API-Football plan is active, since a downgrade to
+    its free tier likely restricts how far back historical fixtures go.
+    Usage: `python run.py backfill-rpl 2025 2024 2023`.
+    """
+    with app.app_context():
+        from app.aggregator.api_football_client import backfill_season_results
+        for season in seasons:
+            added = backfill_season_results(season)
+            print(f"РПЛ {season}: добавлено матчей {added}")
 
 
 def start_app():
@@ -78,11 +98,14 @@ if __name__ == "__main__":
         elif cmd == "backfill-odds":
             max_requests = int(sys.argv[2]) if len(sys.argv) > 2 else 50
             backfill_odds(max_requests=max_requests)
+        elif cmd == "backfill-rpl":
+            seasons = [int(s) for s in sys.argv[2:]] if len(sys.argv) > 2 else [2025]
+            backfill_rpl(seasons)
         elif cmd == "serve":
             start_app()
         else:
             print(f"Неизвестная команда: {cmd}")
-            print("Доступные команды: init-db, sync, analyze, backfill-odds, serve")
+            print("Доступные команды: init-db, sync, analyze, backfill-odds, backfill-rpl, serve")
             sys.exit(1)
     else:
         start_app()

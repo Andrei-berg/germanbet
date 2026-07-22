@@ -12,6 +12,7 @@ def start_scheduler(app) -> None:
 
     from app.aggregator.odds_client import sync_odds_from_api, sync_results_from_odds_api
     from app.aggregator.thesportsdb_client import backfill_team_history
+    from app.aggregator.api_football_client import sync_upcoming_odds, LEAGUE_IDS
     from app.value_finder.value_evaluator import evaluate_all_upcoming
 
     def update_all():
@@ -21,6 +22,7 @@ def start_scheduler(app) -> None:
                 print(f"Синхронизировано завершённых матчей: {synced}")
             sync_odds_from_api()
             backfill_team_history()
+            sync_upcoming_odds(leagues=LEAGUE_IDS)
             evaluate_all_upcoming()
 
     interval = max(Config.UPDATE_INTERVAL_MINUTES, 5)
