@@ -1,10 +1,13 @@
 venv/
 __pycache__/
 *.pyc
-.env
-*.db
 .pytest_cache/
 instance/
-*.log
+.git
+.env*
+.vscode
+.idea
 .DS_Store
-.mcp.json
+Thumbs.db
+*.log
+*.db
